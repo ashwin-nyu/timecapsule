@@ -1,0 +1,10 @@
+timecapsule\crypto\CryptoUtils.class
+timecapsule\model\ApiResponse.class
+timecapsule\ui\TimeCapsuleApp$1.class
+timecapsule\ui\TimeCapsuleApp$3.class
+timecapsule\ui\TimeCapsuleApp.class
+timecapsule\ui\TimeCapsuleApp$2.class
+timecapsule\api\ApiClient.class
+timecapsule\crypto\CryptoUtils$EncryptionResult.class
+timecapsule\model\Capsule.class
+timecapsule\ui\TimeCapsuleApp$4.class
