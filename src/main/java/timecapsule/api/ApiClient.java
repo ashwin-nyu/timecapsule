@@ -1,246 +1,287 @@
 package timecapsule.api;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import timecapsule.model.ApiResponse;
-import timecapsule.model.Capsule;
+import com.google.gson.*;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
+import com.google.gson.stream.JsonWriter;
+import timecapsule.model.*;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
+import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
-/**
- * HTTP client for communicating with the Google Apps Script backend.
- * All network operations run on a background thread to keep the UI responsive.
- */
 public class ApiClient {
-
-    // The URL of the deployed Google Apps Script Web App
-    private final String backendUrl;
     
-    // JSON serializer/deserializer
+    private static final String BACKEND_URL = "https://script.google.com/macros/s/AKfycbwcwtuPmCSls1nHClxsLEkNMU3noKebQ-xshBFnQ5jAJGEPIXglYTOiOCGx2gcjFMpDyg/exec";
+    
+    private final HttpClient httpClient;
     private final Gson gson;
+    private String currentUserId;
+    private String currentUserEmail;
     
-    // Thread pool for background HTTP operations
-    private final ExecutorService executor;
-
-    /**
-     * Create an API client for the given backend URL.
-     * 
-     * @param backendUrl The URL of the Google Apps Script Web App
-     */
-    public ApiClient(String backendUrl) {
-        this.backendUrl = backendUrl;
-        this.gson = new GsonBuilder().create();
-        // Single-threaded executor to serialize requests (simple and safe)
-        this.executor = Executors.newSingleThreadExecutor(r -> {
-            Thread t = new Thread(r, "ApiClient-Worker");
-            t.setDaemon(true);  // Don't prevent app shutdown
-            return t;
-        });
+    public ApiClient() {
+        this.httpClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(30))
+                .followRedirects(HttpClient.Redirect.ALWAYS)
+                .build();
+        this.gson = new GsonBuilder()
+                .setPrettyPrinting()
+                .registerTypeAdapter(Long.class, new LenientLongAdapter())
+                .registerTypeAdapter(long.class, new LenientLongAdapter())
+                .create();
     }
-
-    /**
-     * Create a new time capsule on the server.
-     * 
-     * @param owner Owner's email address
-     * @param headline Optional headline/title
-     * @param unlockTimeEpoch Unix timestamp (milliseconds) when capsule can be opened
-     * @param ciphertextBase64 Base64-encoded encrypted message
-     * @param ivBase64 Base64-encoded IV
-     * @param saltBase64 Base64-encoded salt
-     * @return CompletableFuture with the API response
-     */
-    public CompletableFuture<ApiResponse> createCapsule(String owner, String headline,
-            long unlockTimeEpoch, String ciphertextBase64, String ivBase64, String saltBase64) {
+    
+    public void setCurrentUser(String userId, String email) {
+        this.currentUserId = userId;
+        this.currentUserEmail = email;
+    }
+    
+    public String getCurrentUserId() { return currentUserId; }
+    public String getCurrentUserEmail() { return currentUserEmail; }
+    
+    public CompletableFuture<ApiResponse> registerOrLogin(String email, String displayName, String passwordHash) {
+        Map<String, Object> request = new HashMap<>();
+        request.put("action", "registerOrLogin");
+        request.put("email", email);
+        request.put("displayName", displayName);
+        request.put("passwordHash", passwordHash);
+        return sendRequest(request);
+    }
+    
+    public CompletableFuture<ApiResponse> searchUsers(String query) {
+        Map<String, Object> request = new HashMap<>();
+        request.put("action", "searchUsers");
+        request.put("userId", currentUserId);
+        request.put("query", query);
+        return sendRequest(request);
+    }
+    
+    public CompletableFuture<ApiResponse> getUserByEmail(String email) {
+        Map<String, Object> request = new HashMap<>();
+        request.put("action", "getUserByEmail");
+        request.put("email", email);
+        return sendRequest(request);
+    }
+    
+    public CompletableFuture<ApiResponse> sendFriendRequest(String addresseeUserId) {
+        Map<String, Object> request = new HashMap<>();
+        request.put("action", "friendRequest");
+        request.put("requesterUserId", currentUserId);
+        request.put("addresseeUserId", addresseeUserId);
+        return sendRequest(request);
+    }
+    
+    public CompletableFuture<ApiResponse> acceptFriendRequest(String requesterUserId) {
+        Map<String, Object> request = new HashMap<>();
+        request.put("action", "friendAccept");
+        request.put("requesterUserId", requesterUserId);
+        request.put("addresseeUserId", currentUserId);
+        return sendRequest(request);
+    }
+    
+    public CompletableFuture<ApiResponse> declineFriendRequest(String requesterUserId) {
+        Map<String, Object> request = new HashMap<>();
+        request.put("action", "friendDecline");
+        request.put("requesterUserId", requesterUserId);
+        request.put("addresseeUserId", currentUserId);
+        return sendRequest(request);
+    }
+    
+    public CompletableFuture<ApiResponse> blockUser(String userIdToBlock) {
+        Map<String, Object> request = new HashMap<>();
+        request.put("action", "friendBlock");
+        request.put("userId", currentUserId);
+        request.put("blockUserId", userIdToBlock);
+        return sendRequest(request);
+    }
+    
+    public CompletableFuture<ApiResponse> listFriends() {
+        Map<String, Object> request = new HashMap<>();
+        request.put("action", "friendsList");
+        request.put("userId", currentUserId);
+        return sendRequest(request);
+    }
+    
+    public CompletableFuture<ApiResponse> listFriendRequests() {
+        Map<String, Object> request = new HashMap<>();
+        request.put("action", "friendRequests");
+        request.put("userId", currentUserId);
+        return sendRequest(request);
+    }
+    
+    public CompletableFuture<ApiResponse> sendInvite(String inviteeEmail, String optionalMessage) {
+        Map<String, Object> request = new HashMap<>();
+        request.put("action", "inviteSend");
+        request.put("inviterUserId", currentUserId);
+        request.put("inviteeEmail", inviteeEmail);
+        request.put("message", optionalMessage);
+        return sendRequest(request);
+    }
+    
+    public CompletableFuture<ApiResponse> acceptInvite(String token, String email, String displayName, String passwordHash) {
+        Map<String, Object> request = new HashMap<>();
+        request.put("action", "inviteAccept");
+        request.put("token", token);
+        request.put("email", email);
+        request.put("displayName", displayName);
+        request.put("passwordHash", passwordHash);
+        return sendRequest(request);
+    }
+    
+    public CompletableFuture<ApiResponse> resendInvite(String inviteId) {
+        Map<String, Object> request = new HashMap<>();
+        request.put("action", "inviteResend");
+        request.put("inviteId", inviteId);
+        request.put("inviterUserId", currentUserId);
+        return sendRequest(request);
+    }
+    
+    public CompletableFuture<ApiResponse> listSentInvites() {
+        Map<String, Object> request = new HashMap<>();
+        request.put("action", "invitesList");
+        request.put("userId", currentUserId);
+        return sendRequest(request);
+    }
+    
+    public CompletableFuture<ApiResponse> createCapsule(String headline, long unlockTimeEpoch,
+            String ciphertextBase64, String ivBase64, String saltBase64,
+            List<CapsuleRecipient> recipients, boolean surpriseMode) {
         
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                // Build the request payload
-                Map<String, Object> payload = new HashMap<>();
-                payload.put("action", "create");
-                payload.put("owner", owner);
-                payload.put("headline", headline != null ? headline : "");
-                payload.put("unlockTimeEpoch", unlockTimeEpoch);
-                payload.put("ciphertextBase64", ciphertextBase64);
-                payload.put("ivBase64", ivBase64);
-                payload.put("saltBase64", saltBase64);
-
-                String responseJson = sendPost(payload);
-                return gson.fromJson(responseJson, ApiResponse.class);
-                
-            } catch (Exception e) {
-                // Return error response instead of throwing
-                ApiResponse errorResponse = new ApiResponse();
-                errorResponse.setStatus("error");
-                errorResponse.setError(e.getMessage());
-                return errorResponse;
-            }
-        }, executor);
-    }
-
-    /**
-     * List all capsules for a given owner.
-     * 
-     * @param owner Owner's email address
-     * @return CompletableFuture with the API response containing capsule list
-     */
-    public CompletableFuture<ApiResponse> listCapsules(String owner) {
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                Map<String, Object> payload = new HashMap<>();
-                payload.put("action", "list");
-                payload.put("owner", owner);
-
-                String responseJson = sendPost(payload);
-                return gson.fromJson(responseJson, ApiResponse.class);
-                
-            } catch (Exception e) {
-                ApiResponse errorResponse = new ApiResponse();
-                errorResponse.setStatus("error");
-                errorResponse.setError(e.getMessage());
-                return errorResponse;
-            }
-        }, executor);
-    }
-
-    /**
-     * Attempt to open a capsule.
-     * 
-     * @param capsuleId The ID of the capsule to open
-     * @param owner Owner's email (for verification)
-     * @return CompletableFuture with the API response
-     */
-    public CompletableFuture<ApiResponse> openCapsule(String capsuleId, String owner) {
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                Map<String, Object> payload = new HashMap<>();
-                payload.put("action", "open");
-                payload.put("id", capsuleId);
-                payload.put("owner", owner);
-                // Generate a unique request ID for audit logging
-                payload.put("requestId", java.util.UUID.randomUUID().toString());
-
-                String responseJson = sendPost(payload);
-                return gson.fromJson(responseJson, ApiResponse.class);
-                
-            } catch (Exception e) {
-                ApiResponse errorResponse = new ApiResponse();
-                errorResponse.setStatus("error");
-                errorResponse.setError(e.getMessage());
-                return errorResponse;
-            }
-        }, executor);
-    }
-
-    /**
-     * Send a POST request to the backend with JSON payload.
-     * 
-     * @param payload Map to be serialized as JSON
-     * @return The response body as a string
-     */
-    private String sendPost(Map<String, Object> payload) throws Exception {
-        // Convert payload to JSON
-        String jsonPayload = gson.toJson(payload);
+        Map<String, Object> request = new HashMap<>();
+        request.put("action", "create");
+        request.put("owner", currentUserEmail);
+        request.put("ownerUserId", currentUserId);
+        request.put("headline", headline);
+        request.put("unlockTimeEpoch", unlockTimeEpoch);
+        request.put("ciphertextBase64", ciphertextBase64);
+        request.put("ivBase64", ivBase64);
+        request.put("saltBase64", saltBase64);
         
-        // Open connection
-        URL url = new URL(backendUrl);
-        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        if (recipients != null && !recipients.isEmpty()) {
+            for (CapsuleRecipient r : recipients) {
+                r.setNotifyOnCreate(!surpriseMode);
+                r.setNotifyOnUnlock(true);
+            }
+            request.put("recipients", recipients);
+        }
         
-        try {
-            // Configure the request
-            conn.setRequestMethod("POST");
-            conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
-            conn.setDoOutput(true);
-            conn.setConnectTimeout(30000);  // 30 second timeout
-            conn.setReadTimeout(30000);
-            
-            // Handle redirects (Apps Script may redirect)
-            conn.setInstanceFollowRedirects(true);
-            
-            // Send the JSON payload
-            try (OutputStream os = conn.getOutputStream()) {
-                os.write(jsonPayload.getBytes(StandardCharsets.UTF_8));
-            }
-            
-            // Read the response
-            int responseCode = conn.getResponseCode();
-            
-            // Handle redirect manually if needed (for exec URLs)
-            if (responseCode == HttpURLConnection.HTTP_MOVED_TEMP || 
-                responseCode == HttpURLConnection.HTTP_MOVED_PERM ||
-                responseCode == 303) {
-                String newUrl = conn.getHeaderField("Location");
-                if (newUrl != null) {
-                    conn.disconnect();
-                    return sendGetRedirect(newUrl);
-                }
-            }
-            
-            BufferedReader reader;
-            if (responseCode >= 200 && responseCode < 300) {
-                reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8));
+        return sendRequest(request);
+    }
+    
+    public CompletableFuture<ApiResponse> listSentCapsules() {
+        Map<String, Object> request = new HashMap<>();
+        request.put("action", "listSent");
+        request.put("owner", currentUserEmail);
+        request.put("userId", currentUserId);
+        return sendRequest(request);
+    }
+    
+    public CompletableFuture<ApiResponse> listReceivedCapsules() {
+        Map<String, Object> request = new HashMap<>();
+        request.put("action", "listReceived");
+        request.put("userId", currentUserId);
+        request.put("email", currentUserEmail);
+        return sendRequest(request);
+    }
+    
+    public CompletableFuture<ApiResponse> listAllCapsules() {
+        Map<String, Object> request = new HashMap<>();
+        request.put("action", "list");
+        request.put("owner", currentUserEmail);
+        request.put("userId", currentUserId);
+        return sendRequest(request);
+    }
+    
+    public CompletableFuture<ApiResponse> openCapsule(String capsuleId) {
+        Map<String, Object> request = new HashMap<>();
+        request.put("action", "open");
+        request.put("id", capsuleId);
+        request.put("owner", currentUserEmail);
+        request.put("userId", currentUserId);
+        request.put("requestId", generateRequestId());
+        return sendRequest(request);
+    }
+    
+    public CompletableFuture<ApiResponse> markRecipientOpened(String capsuleId) {
+        Map<String, Object> request = new HashMap<>();
+        request.put("action", "markRecipientOpened");
+        request.put("capsuleId", capsuleId);
+        request.put("userId", currentUserId);
+        request.put("email", currentUserEmail);
+        return sendRequest(request);
+    }
+    
+    private CompletableFuture<ApiResponse> sendRequest(Map<String, Object> requestData) {
+        String json = gson.toJson(requestData);
+        
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(BACKEND_URL))
+                .timeout(Duration.ofSeconds(30))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(json))
+                .build();
+        
+        return httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .thenApply(response -> {
+                    try {
+                        String body = response.body();
+                        System.out.println("[ApiClient] Response: " + body);
+                        return gson.fromJson(body, ApiResponse.class);
+                    } catch (Exception e) {
+                        ApiResponse errorResponse = new ApiResponse();
+                        errorResponse.setStatus("error");
+                        errorResponse.setError("Failed to parse response: " + e.getMessage());
+                        System.err.println("[ApiClient] Parse error: " + e.getMessage());
+                        return errorResponse;
+                    }
+                })
+                .exceptionally(e -> {
+                    ApiResponse errorResponse = new ApiResponse();
+                    errorResponse.setStatus("error");
+                    errorResponse.setError("Network error: " + e.getMessage());
+                    return errorResponse;
+                });
+    }
+    
+    private String generateRequestId() {
+        return "REQ" + System.currentTimeMillis() + "_" + 
+               Long.toHexString(Double.doubleToLongBits(Math.random()));
+    }
+    
+    private static class LenientLongAdapter extends TypeAdapter<Long> {
+        @Override
+        public void write(JsonWriter out, Long value) throws IOException {
+            if (value == null) {
+                out.nullValue();
             } else {
-                reader = new BufferedReader(new InputStreamReader(conn.getErrorStream(), StandardCharsets.UTF_8));
+                out.value(value);
             }
-            
-            StringBuilder response = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                response.append(line);
-            }
-            reader.close();
-            
-            return response.toString();
-            
-        } finally {
-            conn.disconnect();
         }
-    }
-
-    /**
-     * Follow a redirect with a GET request.
-     * Google Apps Script sometimes redirects POST to GET.
-     */
-    private String sendGetRedirect(String redirectUrl) throws Exception {
-        URL url = new URL(redirectUrl);
-        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         
-        try {
-            conn.setRequestMethod("GET");
-            conn.setConnectTimeout(30000);
-            conn.setReadTimeout(30000);
-            
-            BufferedReader reader = new BufferedReader(
-                new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8));
-            
-            StringBuilder response = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                response.append(line);
+        @Override
+        public Long read(JsonReader in) throws IOException {
+            JsonToken token = in.peek();
+            if (token == JsonToken.NULL) {
+                in.nextNull();
+                return 0L;
+            } else if (token == JsonToken.STRING) {
+                String str = in.nextString();
+                try {
+                    return Long.parseLong(str);
+                } catch (NumberFormatException e) {
+                    return 0L;
+                }
+            } else if (token == JsonToken.NUMBER) {
+                return in.nextLong();
             }
-            reader.close();
-            
-            return response.toString();
-            
-        } finally {
-            conn.disconnect();
+            return 0L;
         }
-    }
-
-    /**
-     * Shutdown the executor service gracefully.
-     */
-    public void shutdown() {
-        executor.shutdown();
     }
 }

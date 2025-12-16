@@ -1,136 +1,119 @@
 package timecapsule.model;
 
-/**
- * Represents a time capsule with its metadata and encrypted content.
- * This is the main data model used throughout the application.
- */
+import java.util.ArrayList;
+import java.util.List;
+
 public class Capsule {
-    
-    // Unique identifier assigned by the server
-    private String id;
-    
-    // Email of the capsule owner
-    private String owner;
-    
-    // Optional headline/title for the capsule
+    private String capsuleId;
+    private String ownerUserId;
+    private String ownerEmail;
+    private String ownerDisplayName;
     private String headline;
+    private long unlockAtUtc;
+    private CapsuleState state;
+    private long createdAtUtc;
+    private long updatedAtUtc;
     
-    // Unix epoch timestamp (milliseconds) when capsule can be opened
-    private long unlockTimeEpoch;
-    
-    // Unix epoch timestamp (milliseconds) when capsule was created
-    private long createdAtEpoch;
-    
-    // Current state: "sealed" or "opened"
-    private String state;
-    
-    // Base64-encoded encrypted message content
     private String ciphertextBase64;
-    
-    // Base64-encoded initialization vector for AES-GCM
     private String ivBase64;
-    
-    // Base64-encoded salt used for PBKDF2 key derivation
     private String saltBase64;
-
-    // ========================
-    // Constructors
-    // ========================
     
+    private List<CapsuleRecipient> recipients;
+    private transient String plaintextMessage;
+
     public Capsule() {
-        // Default constructor for JSON deserialization
+        this.recipients = new ArrayList<>();
+        this.state = CapsuleState.SEALED;
     }
 
-    public Capsule(String id, String owner, String headline, long unlockTimeEpoch, String state) {
-        this.id = id;
-        this.owner = owner;
+    public Capsule(String capsuleId, String ownerUserId, String headline, 
+                   long unlockAtUtc, long createdAtUtc) {
+        this();
+        this.capsuleId = capsuleId;
+        this.ownerUserId = ownerUserId;
         this.headline = headline;
-        this.unlockTimeEpoch = unlockTimeEpoch;
-        this.state = state;
+        this.unlockAtUtc = unlockAtUtc;
+        this.createdAtUtc = createdAtUtc;
+        this.updatedAtUtc = createdAtUtc;
     }
 
-    // ========================
-    // Getters and Setters
-    // ========================
+    public String getCapsuleId() { return capsuleId; }
+    public void setCapsuleId(String capsuleId) { this.capsuleId = capsuleId; }
 
-    public String getId() {
-        return id;
+    public String getOwnerUserId() { return ownerUserId; }
+    public void setOwnerUserId(String ownerUserId) { this.ownerUserId = ownerUserId; }
+
+    public String getOwnerEmail() { return ownerEmail; }
+    public void setOwnerEmail(String ownerEmail) { this.ownerEmail = ownerEmail; }
+
+    public String getOwnerDisplayName() { return ownerDisplayName; }
+    public void setOwnerDisplayName(String ownerDisplayName) { this.ownerDisplayName = ownerDisplayName; }
+
+    public String getHeadline() { return headline; }
+    public void setHeadline(String headline) { this.headline = headline; }
+
+    public long getUnlockAtUtc() { return unlockAtUtc; }
+    public void setUnlockAtUtc(long unlockAtUtc) { this.unlockAtUtc = unlockAtUtc; }
+
+    public CapsuleState getState() { return state; }
+    public void setState(CapsuleState state) { this.state = state; }
+
+    public long getCreatedAtUtc() { return createdAtUtc; }
+    public void setCreatedAtUtc(long createdAtUtc) { this.createdAtUtc = createdAtUtc; }
+
+    public long getUpdatedAtUtc() { return updatedAtUtc; }
+    public void setUpdatedAtUtc(long updatedAtUtc) { this.updatedAtUtc = updatedAtUtc; }
+
+    public String getCiphertextBase64() { return ciphertextBase64; }
+    public void setCiphertextBase64(String ciphertextBase64) { this.ciphertextBase64 = ciphertextBase64; }
+
+    public String getIvBase64() { return ivBase64; }
+    public void setIvBase64(String ivBase64) { this.ivBase64 = ivBase64; }
+
+    public String getSaltBase64() { return saltBase64; }
+    public void setSaltBase64(String saltBase64) { this.saltBase64 = saltBase64; }
+
+    public List<CapsuleRecipient> getRecipients() { return recipients; }
+    public void setRecipients(List<CapsuleRecipient> recipients) { this.recipients = recipients; }
+
+    public String getPlaintextMessage() { return plaintextMessage; }
+    public void setPlaintextMessage(String plaintextMessage) { this.plaintextMessage = plaintextMessage; }
+
+    public void addRecipient(CapsuleRecipient recipient) {
+        if (recipients == null) {
+            recipients = new ArrayList<>();
+        }
+        recipients.add(recipient);
     }
 
-    public void setId(String id) {
-        this.id = id;
+    public boolean isOpenable() {
+        return state == CapsuleState.OPENED || System.currentTimeMillis() >= unlockAtUtc;
     }
 
-    public String getOwner() {
-        return owner;
+    public String getSenderDisplay() {
+        if (ownerDisplayName != null && !ownerDisplayName.isEmpty()) {
+            return ownerDisplayName;
+        }
+        return ownerEmail;
     }
 
-    public void setOwner(String owner) {
-        this.owner = owner;
-    }
-
-    public String getHeadline() {
-        return headline;
-    }
-
-    public void setHeadline(String headline) {
-        this.headline = headline;
-    }
-
-    public long getUnlockTimeEpoch() {
-        return unlockTimeEpoch;
-    }
-
-    public void setUnlockTimeEpoch(long unlockTimeEpoch) {
-        this.unlockTimeEpoch = unlockTimeEpoch;
-    }
-
-    public long getCreatedAtEpoch() {
-        return createdAtEpoch;
-    }
-
-    public void setCreatedAtEpoch(long createdAtEpoch) {
-        this.createdAtEpoch = createdAtEpoch;
-    }
-
-    public String getState() {
-        return state;
-    }
-
-    public void setState(String state) {
-        this.state = state;
-    }
-
-    public String getCiphertextBase64() {
-        return ciphertextBase64;
-    }
-
-    public void setCiphertextBase64(String ciphertextBase64) {
-        this.ciphertextBase64 = ciphertextBase64;
-    }
-
-    public String getIvBase64() {
-        return ivBase64;
-    }
-
-    public void setIvBase64(String ivBase64) {
-        this.ivBase64 = ivBase64;
-    }
-
-    public String getSaltBase64() {
-        return saltBase64;
-    }
-
-    public void setSaltBase64(String saltBase64) {
-        this.saltBase64 = saltBase64;
-    }
-
-    @Override
-    public String toString() {
-        return "Capsule{" +
-                "id='" + id + '\'' +
-                ", headline='" + headline + '\'' +
-                ", state='" + state + '\'' +
-                '}';
+    public String getTimeRemaining() {
+        long now = System.currentTimeMillis();
+        if (now >= unlockAtUtc) {
+            return "✓ Ready!";
+        }
+        
+        long diff = unlockAtUtc - now;
+        long days = diff / (24 * 60 * 60 * 1000);
+        long hours = (diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000);
+        long minutes = (diff % (60 * 60 * 1000)) / (60 * 1000);
+        
+        if (days > 0) {
+            return days + "d " + hours + "h";
+        } else if (hours > 0) {
+            return hours + "h " + minutes + "m";
+        } else {
+            return minutes + "m";
+        }
     }
 }

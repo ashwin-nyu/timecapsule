@@ -2,92 +2,79 @@ package timecapsule.model;
 
 import java.util.List;
 
-/**
- * Generic response wrapper for API calls to the backend.
- * Parsed from JSON responses returned by the Google Apps Script web app.
- */
 public class ApiResponse {
-    
-    // Status of the request: "ok", "error", "notYet"
     private String status;
-    
-    // Error message (if status is "error")
     private String error;
+    private String message;
     
-    // Capsule ID (returned after successful create)
     private String id;
-    
-    // List of capsules (returned by list action)
+    private Capsule capsule;
     private List<Capsule> capsules;
     
-    // Single capsule data (returned by open action)
-    private Capsule capsule;
+    private List<Friend> friends;
+    private List<Friend> requests;
     
-    // Message from server (optional)
-    private String message;
+    private String inviteId;
+    private String token;
+    private List<Invite> invites;
+    
+    private User user;
+    private List<User> users;
+    
+    private long serverTimeEpoch;
+    private long unlockTimeEpoch;
 
-    // ========================
-    // Getters and Setters
-    // ========================
+    public ApiResponse() {}
 
-    public String getStatus() {
-        return status;
-    }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
 
-    public void setStatus(String status) {
-        this.status = status;
-    }
+    public String getError() { return error; }
+    public void setError(String error) { this.error = error; }
 
-    public String getError() {
-        return error;
-    }
+    public String getMessage() { return message; }
+    public void setMessage(String message) { this.message = message; }
 
-    public void setError(String error) {
-        this.error = error;
-    }
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
 
-    public String getId() {
-        return id;
-    }
+    public Capsule getCapsule() { return capsule; }
+    public void setCapsule(Capsule capsule) { this.capsule = capsule; }
 
-    public void setId(String id) {
-        this.id = id;
-    }
+    public List<Capsule> getCapsules() { return capsules; }
+    public void setCapsules(List<Capsule> capsules) { this.capsules = capsules; }
 
-    public List<Capsule> getCapsules() {
-        return capsules;
-    }
+    public List<Friend> getFriends() { return friends; }
+    public void setFriends(List<Friend> friends) { this.friends = friends; }
 
-    public void setCapsules(List<Capsule> capsules) {
-        this.capsules = capsules;
-    }
+    public List<Friend> getRequests() { return requests; }
+    public void setRequests(List<Friend> requests) { this.requests = requests; }
 
-    public Capsule getCapsule() {
-        return capsule;
-    }
+    public String getInviteId() { return inviteId; }
+    public void setInviteId(String inviteId) { this.inviteId = inviteId; }
 
-    public void setCapsule(Capsule capsule) {
-        this.capsule = capsule;
-    }
+    public String getToken() { return token; }
+    public void setToken(String token) { this.token = token; }
 
-    public String getMessage() {
-        return message;
-    }
+    public List<Invite> getInvites() { return invites; }
+    public void setInvites(List<Invite> invites) { this.invites = invites; }
 
-    public void setMessage(String message) {
-        this.message = message;
-    }
+    public User getUser() { return user; }
+    public void setUser(User user) { this.user = user; }
 
-    /**
-     * Check if the response indicates success.
-     */
-    public boolean isSuccess() {
+    public List<User> getUsers() { return users; }
+    public void setUsers(List<User> users) { this.users = users; }
+
+    public long getServerTimeEpoch() { return serverTimeEpoch; }
+    public void setServerTimeEpoch(long serverTimeEpoch) { this.serverTimeEpoch = serverTimeEpoch; }
+
+    public long getUnlockTimeEpoch() { return unlockTimeEpoch; }
+    public void setUnlockTimeEpoch(long unlockTimeEpoch) { this.unlockTimeEpoch = unlockTimeEpoch; }
+
+    public boolean isOk() {
         return "ok".equalsIgnoreCase(status);
     }
 
-    /**
-     * Check if the capsule is not yet ready to open.
-     */
     public boolean isNotYet() {
         return "notYet".equalsIgnoreCase(status);
     }
